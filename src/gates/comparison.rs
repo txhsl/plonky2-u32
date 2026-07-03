@@ -23,7 +23,7 @@ use plonky2::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
-use plonky2::util::{bits_u64, ceil_div_usize};
+use plonky2::util::bits_u64;
 
 /// A gate for checking that one value is less than or equal to another.
 #[derive(Clone, Debug)]
@@ -44,7 +44,7 @@ impl<F: RichField + Extendable<D>, const D: usize> ComparisonGate<F, D> {
     }
 
     pub fn chunk_bits(&self) -> usize {
-        ceil_div_usize(self.num_bits, self.num_chunks)
+        self.num_bits.div_ceil(self.num_chunks)
     }
 
     pub fn wire_first_input(&self) -> usize {
@@ -434,7 +434,11 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F, D>
         ]
     }
 
-    fn run_once(&self, witness: &PartitionWitness<F>, out_buffer: &mut GeneratedValues<F>) {
+    fn run_once(
+        &self,
+        witness: &PartitionWitness<F>,
+        out_buffer: &mut GeneratedValues<F>,
+    ) -> Result<(), anyhow::Error> {
         let local_wire = |column| Wire {
             row: self.row,
             column,
@@ -502,36 +506,37 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F, D>
             .map(|x| F::from_canonical_u64(*x))
             .collect();
 
-        out_buffer.set_wire(local_wire(self.gate.wire_result_bool()), result);
+        out_buffer.set_wire(local_wire(self.gate.wire_result_bool()), result)?;
         out_buffer.set_wire(
             local_wire(self.gate.wire_most_significant_diff()),
             most_significant_diff,
-        );
+        )?;
         for i in 0..self.gate.num_chunks {
             out_buffer.set_wire(
                 local_wire(self.gate.wire_first_chunk_val(i)),
                 first_input_chunks[i],
-            );
+            )?;
             out_buffer.set_wire(
                 local_wire(self.gate.wire_second_chunk_val(i)),
                 second_input_chunks[i],
-            );
+            )?;
             out_buffer.set_wire(
                 local_wire(self.gate.wire_equality_dummy(i)),
                 equality_dummies[i],
-            );
-            out_buffer.set_wire(local_wire(self.gate.wire_chunks_equal(i)), chunks_equal[i]);
+            )?;
+            out_buffer.set_wire(local_wire(self.gate.wire_chunks_equal(i)), chunks_equal[i])?;
             out_buffer.set_wire(
                 local_wire(self.gate.wire_intermediate_value(i)),
                 intermediate_values[i],
-            );
+            )?;
         }
         for i in 0..self.gate.chunk_bits() + 1 {
             out_buffer.set_wire(
                 local_wire(self.gate.wire_most_significant_diff_bit(i)),
                 msd_bits[i],
-            );
+            )?;
         }
+        Ok(())
     }
 
     fn serialize(&self, dst: &mut Vec<u8>, common_data: &CommonCircuitData<F, D>) -> IoResult<()> {
